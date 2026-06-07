@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>시계열 예측 분석 시스템</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;500;700&family=Noto+Sans+KR:wght@300;400;500&family=Fira+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --paper:  #f5f0e8; --paper2: #ede8df; --paper3: #e4ddd2;
+  --ink:    #1c1810; --ink2:   #3d3628; --ink3:   #6b5f4e; --ink4: #9c8f7e;
+  --rule:   rgba(28,24,16,0.12); --rule2: rgba(28,24,16,0.06);
+  --red:    #8b2a1a; --blue:   #1a3a5c; --teal:   #1a4a3a; --amber: #7a4e10;
+  --serif:  'Noto Serif KR', Georgia, serif;
+  --sans:   'Noto Sans KR', sans-serif;
+  --mono:   'Fira Mono', 'Courier New', monospace;
+  --header-h: 0px; /* set by JS */
+}
+html { height: 100%; }
+body { background: var(--paper); color: var(--ink); font-family: var(--serif); font-size: 14px; line-height: 1.7; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+
+/* HEADER */
+.header { border-bottom: 2px solid var(--ink); padding: 0 36px; background: var(--paper); flex-shrink: 0; z-index: 200; }
+.header-top { display: flex; align-items: baseline; gap: 0; padding: 18px 0 0; }
+.title-main { font-family: var(--serif); font-size: 22px; font-weight: 700; color: var(--ink); letter-spacing: -0.5px; }
+.title-sub { font-family: var(--sans); font-size: 11px; color: var(--ink3); font-weight: 300; margin-left: 18px; letter-spacing: 0.5px; }
+.header-nav { display: flex; gap: 28px; padding: 8px 0; margin-top: 4px; font-family: var(--sans); font-size: 12px; color: var(--ink3); }
+.nav-item { display: flex; align-items: center; gap: 6px; }
+.status-pip { width: 6px; height: 6px; border-radius: 50%; background: var(--ink4); flex-shrink: 0; }
+.status-pip.live { background: var(--teal); }
+
+/* LAYOUT */
+.layout { display: flex; flex: 1; min-height: 0; /* critical: allows children to shrink */ }
+
+/* SIDEBAR */
+.sidebar { width: 272px; flex-shrink: 0; border-right: 1px solid var(--rule); background: var(--paper2); padding: 24px 20px 32px; display: flex; flex-direction: column; gap: 22px; overflow-y: auto; min-height: 0; }
+.s-title { font-family: var(--sans); font-size: 9px; font-weight: 500; letter-spacing: 2px; color: var(--ink3); text-transform: uppercase; padding-bottom: 8px; border-bottom: 1px solid var(--rule); margin-bottom: 12px; }
+
+/* Upload */
+.upload-zone { border: 1.5px dashed var(--ink4); border-radius: 3px; padding: 20px 14px; text-align: center; cursor: pointer; transition: all 0.2s; position: relative; }
+.upload-zone:hover, .upload-zone.drag { border-color: var(--ink2); background: rgba(28,24,16,0.03); }
+.upload-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.u-sym { font-size: 26px; display: block; margin-bottom: 8px; filter: grayscale(1) contrast(0.5); }
+.u-head { font-family: var(--sans); font-size: 12px; font-weight: 500; color: var(--ink2); display: block; margin-bottom: 3px; }
+.u-sub { font-family: var(--sans); font-size: 11px; color: var(--ink3); line-height: 1.5; }
+
+/* File meta */
+.file-meta { display: none; font-family: var(--mono); font-size: 11px; color: var(--ink3); border: 1px solid var(--rule); border-radius: 2px; overflow: hidden; margin-top: 10px; }
+.fm-head { background: var(--paper3); padding: 6px 10px; font-family: var(--sans); font-size: 10px; font-weight: 500; color: var(--ink2); border-bottom: 1px solid var(--rule); display: flex; gap: 6px; align-items: center; }
+.fm-row { display: flex; justify-content: space-between; padding: 4px 10px; border-bottom: 1px solid var(--rule2); }
+.fm-row:last-child { border-bottom: none; }
+.fm-val { color: var(--ink); font-weight: 500; }
+
+/* Params */
+.param-row { margin-bottom: 16px; }
+.param-label { display: flex; justify-content: space-between; align-items: center; font-family: var(--sans); font-size: 11px; color: var(--ink2); margin-bottom: 6px; }
+.param-val { font-family: var(--mono); font-size: 11px; color: var(--ink); background: var(--paper3); padding: 1px 7px; border: 1px solid var(--rule); border-radius: 2px; }
+input[type=range] { -webkit-appearance: none; width: 100%; height: 2px; background: var(--rule); border-radius: 1px; outline: none; cursor: pointer; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px; height: 13px; border-radius: 50%; background: var(--ink); cursor: pointer; border: 2px solid var(--paper2); box-shadow: 0 0 0 1px var(--ink); }
+select { width: 100%; background: var(--paper); border: 1px solid var(--rule); border-radius: 2px; color: var(--ink2); padding: 7px 28px 7px 10px; font-size: 12px; font-family: var(--sans); outline: none; cursor: pointer; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236b5f4e'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; }
+select:focus { border-color: var(--ink2); }
+
+/* Buttons */
+.btn-primary { width: 100%; padding: 11px 16px; background: var(--ink); color: var(--paper); border: none; border-radius: 2px; font-size: 13px; font-weight: 500; font-family: var(--sans); cursor: pointer; transition: all 0.15s; display: flex; align-items: center; justify-content: center; gap: 8px; letter-spacing: 0.5px; }
+.btn-primary:hover:not(:disabled) { background: var(--ink2); }
+.btn-primary:disabled { background: var(--paper3); color: var(--ink4); cursor: not-allowed; border: 1px solid var(--rule); }
+.btn-ghost { width: 100%; padding: 8px; background: transparent; color: var(--ink3); border: 1px solid var(--rule); border-radius: 2px; font-size: 11px; font-family: var(--sans); cursor: pointer; transition: all 0.15s; }
+.btn-ghost:hover { border-color: var(--ink3); color: var(--ink2); }
+
+/* Log */
+.log-panel { font-family: var(--mono); font-size: 10px; color: var(--ink3); background: var(--paper); border-radius: 2px; padding: 8px 10px; max-height: 72px; overflow-y: auto; border: 1px solid var(--rule); display: none; line-height: 1.6; }
+.log-line.ok { color: var(--teal); } .log-line.warn { color: var(--red); } .log-line.info { color: var(--blue); }
+
+/* MAIN */
+.main { flex: 1; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.page-rule { border-bottom: 1px solid var(--rule); padding: 20px 32px 16px; display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; flex-shrink: 0; }
+.page-rule h2 { font-family: var(--serif); font-size: 18px; font-weight: 700; color: var(--ink); }
+.page-rule .pr-meta { font-family: var(--sans); font-size: 11px; color: var(--ink4); }
+.main-body { padding: 24px 32px 48px; display: flex; flex-direction: column; gap: 32px; }
+
+/* Empty */
+.empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 40px; text-align: center; }
+.es-sym { font-size: 40px; margin-bottom: 20px; filter: grayscale(1) contrast(0.5); }
+.empty-state h2 { font-family: var(--serif); font-size: 20px; font-weight: 400; color: var(--ink2); margin-bottom: 10px; }
+.empty-state p { font-family: var(--sans); font-size: 13px; color: var(--ink3); max-width: 380px; line-height: 1.7; }
+.csv-box { margin-top: 28px; border: 1px solid var(--rule); border-radius: 2px; overflow: hidden; text-align: left; width: 100%; max-width: 380px; }
+.csv-box-head { background: var(--paper3); padding: 8px 14px; font-family: var(--sans); font-size: 10px; font-weight: 500; color: var(--ink3); letter-spacing: 1px; text-transform: uppercase; border-bottom: 1px solid var(--rule); }
+.csv-box-body { padding: 12px 14px; font-family: var(--mono); font-size: 11px; color: var(--ink3); display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; }
+.csv-col-head { color: var(--ink2); font-weight: 500; margin-bottom: 3px; font-size: 10px; }
+.csv-box-note { font-family: var(--sans); font-size: 10px; color: var(--ink4); padding: 7px 14px; border-top: 1px solid var(--rule2); background: var(--paper2); }
+
+/* Dashboard sections */
+#dashboard { display: none; flex-direction: column; }
+.section-head { font-family: var(--sans); font-size: 10px; font-weight: 500; letter-spacing: 2px; color: var(--ink4); text-transform: uppercase; padding-bottom: 10px; border-bottom: 1px solid var(--rule); margin-bottom: 16px; }
+
+/* KPI */
+.kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid var(--rule); border-radius: 2px; overflow: hidden; }
+.kpi-cell { padding: 16px 14px; border-right: 1px solid var(--rule); }
+.kpi-cell:last-child { border-right: none; }
+.kc-label { font-family: var(--sans); font-size: 9px; font-weight: 500; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink4); margin-bottom: 6px; }
+.kc-val { font-family: var(--mono); font-size: 22px; font-weight: 500; color: var(--ink); line-height: 1.1; }
+.kc-sub { font-family: var(--sans); font-size: 10px; color: var(--ink4); margin-top: 5px; }
+.kpi-cell.accent { background: var(--ink); }
+.kpi-cell.accent .kc-label { color: rgba(245,240,232,0.5); }
+.kpi-cell.accent .kc-val { color: var(--paper); }
+.kpi-cell.accent .kc-sub { color: rgba(245,240,232,0.4); }
+
+/* Model bar */
+.model-bar { border: 1px solid var(--rule); border-radius: 2px; overflow: hidden; }
+.model-bar-head { background: var(--paper3); padding: 8px 16px; font-family: var(--sans); font-size: 10px; font-weight: 500; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink3); border-bottom: 1px solid var(--rule); display: flex; align-items: center; justify-content: space-between; }
+.model-bar-body { display: flex; flex-wrap: wrap; }
+.model-stat { padding: 10px 18px; border-right: 1px solid var(--rule2); font-family: var(--sans); font-size: 11px; color: var(--ink3); }
+.model-stat strong { display: block; font-family: var(--mono); font-size: 13px; color: var(--ink); font-weight: 500; margin-top: 1px; }
+.model-stat:last-child { border-right: none; }
+.quality-tag { font-family: var(--sans); font-size: 10px; padding: 3px 10px; border-radius: 1px; letter-spacing: 0.5px; }
+.q-good { background: #e8f0e4; color: var(--teal); } .q-ok { background: #f0ead8; color: var(--amber); } .q-bad { background: #f0e4e2; color: var(--red); }
+
+/* Chart panels */
+.chart-panel { border: 1px solid var(--rule); border-radius: 2px; background: var(--paper); }
+.cp-head { background: var(--paper2); border-bottom: 1px solid var(--rule); padding: 9px 16px; display: flex; align-items: center; justify-content: space-between; border-radius: 2px 2px 0 0; }
+.cp-title { font-family: var(--sans); font-size: 12px; font-weight: 500; color: var(--ink2); }
+.cp-sub { font-family: var(--mono); font-size: 10px; color: var(--ink4); }
+.cp-body { padding: 24px 20px 16px 16px; overflow: visible; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+
+/* Legend */
+.chart-legend { display: flex; flex-wrap: wrap; gap: 14px; font-family: var(--sans); font-size: 11px; color: var(--ink3); margin-bottom: 12px; }
+.legend-item { display: flex; align-items: center; gap: 6px; }
+.legend-line { width: 18px; height: 2px; flex-shrink: 0; }
+
+/* Forecast table */
+.fc-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.fc-table thead th { font-family: var(--sans); font-size: 9px; font-weight: 500; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink3); padding: 8px 14px; text-align: left; border-bottom: 2px solid var(--rule); background: var(--paper2); position: sticky; top: 0; }
+.fc-table tbody td { font-family: var(--mono); font-size: 12px; padding: 8px 14px; border-bottom: 1px solid var(--rule2); color: var(--ink3); }
+.fc-table tbody tr:hover td { background: var(--paper2); }
+.fc-table tbody td.period { color: var(--ink4); font-size: 11px; }
+.fc-table tbody td.pred { color: var(--ink); font-weight: 500; }
+.fc-table tbody td.pos { color: var(--teal); } .fc-table tbody td.neg { color: var(--red); }
+
+/* Spinner */
+.spinner { width: 13px; height: 13px; border: 2px solid rgba(245,240,232,0.3); border-top-color: var(--paper); border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Interpretation box */
+.interp-box { border: 1px solid var(--rule); border-radius: 2px; overflow: hidden; }
+.interp-head { background: var(--paper3); padding: 9px 16px; font-family: var(--sans); font-size: 10px; font-weight: 500; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink3); border-bottom: 1px solid var(--rule); display: flex; align-items: center; gap: 8px; }
+.interp-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 8px; }
+.interp-row { display: flex; align-items: flex-start; gap: 10px; font-family: var(--sans); font-size: 12px; color: var(--ink2); line-height: 1.6; }
+.interp-icon { flex-shrink: 0; font-size: 14px; margin-top: 1px; }
+.interp-row b { color: var(--ink); font-weight: 500; }
+
+/* Warning banner */
+.warn-banner { border: 1px solid rgba(139,42,26,0.25); background: #fdf5f3; border-radius: 2px; padding: 10px 16px; font-family: var(--sans); font-size: 12px; color: var(--red); display: flex; align-items: flex-start; gap: 8px; line-height: 1.6; }
+.warn-banner b { font-weight: 600; }
+
+/* Download button */
+.btn-dl { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; background: transparent; border: 1px solid var(--rule); border-radius: 2px; font-family: var(--sans); font-size: 11px; color: var(--ink3); cursor: pointer; transition: all 0.15s; text-decoration: none; }
+.btn-dl:hover { border-color: var(--ink3); color: var(--ink2); }
+
+/* Model selection mode tag */
+.sel-mode-auto { background: #e8f0e4; color: var(--teal); font-family: var(--sans); font-size: 10px; padding: 2px 8px; border-radius: 1px; font-weight: 500; }
+.sel-mode-manual { background: #f0ead8; color: var(--amber); font-family: var(--sans); font-size: 10px; padding: 2px 8px; border-radius: 1px; font-weight: 500; }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 2px; }
+
+/* Sidebar run button always visible at bottom */
+.sidebar-bottom { margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding-top: 12px; flex-shrink: 0; }
+
+@media (max-width: 1100px) { .kpi-row { grid-template-columns: repeat(3,1fr); } .grid-3 { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 800px) {
+  .layout { flex-direction: column; overflow-y: auto; }
+  .sidebar { width: 100%; height: auto; min-height: unset; overflow-y: visible; }
+  .kpi-row { grid-template-columns: repeat(2,1fr); }
+  .grid-2,.grid-3 { grid-template-columns: 1fr; }
+  .header,.main-body,.page-rule { padding-left: 20px; padding-right: 20px; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <span class="title-main">시계열 예측 분석 시스템</span>
+    <span class="title-sub">Univariate Time Series Forecasting Platform</span>
+  </div>
+  <div class="header-nav">
+    <span class="nav-item"><span class="status-pip" id="statusPip"></span><span id="statusText">대기 중</span></span>
+    <span style="margin-left:auto; font-family:var(--sans); font-size:11px; color:var(--ink4);" id="headerMeta"></span>
+  </div>
+</div>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div>
+      <div class="s-title">데이터 입력</div>
+      <div class="upload-zone" id="uploadZone">
+        <input type="file" id="fileInput" accept=".csv">
+        <span class="u-sym">⬆</span>
+        <span class="u-head">CSV 파일 업로드</span>
+        <span class="u-sub">클릭 또는 드래그&드롭<br>단변량 시계열 형식</span>
+      </div>
+      <div class="file-meta" id="fileMeta"></div>
+      <button class="btn-ghost" id="sampleBtn" style="margin-top:8px;">샘플 데이터 불러오기</button>
+    </div>
+
+    <div>
+      <div class="s-title">예측 모델</div>
+      <div class="param-row">
+        <div class="param-label">예측 방법</div>
+        <select id="methodSelect">
+          <option value="auto">자동 선택 (권장)</option>
+          <option value="ses">SES — 단순 지수평활</option>
+          <option value="des">DES — 이중 지수평활 (Holt)</option>
+          <option value="tes">TES — Holt-Winters (삼중)</option>
+          <option value="ma">이동평균 (MA)</option>
+          <option value="linear">선형 추세 회귀</option>
+          <option value="damped">감쇠 추세</option>
+        </select>
+      </div>
+    </div>
+
+    <div>
+      <div class="s-title">파라미터</div>
+      <div class="param-row">
+        <div class="param-label">예측 시평 <span class="param-val" id="horizonVal">12</span></div>
+        <input type="range" id="horizonSlider" min="1" max="60" value="12" step="1">
+      </div>
+      <div class="param-row">
+        <div class="param-label">간이 신뢰구간 <span class="param-val" id="ciVal">95%</span></div>
+        <input type="range" id="ciSlider" min="80" max="99" value="95" step="1">
+      </div>
+      <div class="param-row">
+        <div class="param-label">계절성 주기 <span class="param-val" id="seasonVal">자동</span></div>
+        <select id="seasonSelect">
+          <option value="auto">자동 감지</option>
+          <option value="4">분기 (4)</option>
+          <option value="7">주간 (7)</option>
+          <option value="12">월간 (12)</option>
+          <option value="24">시간 (24)</option>
+          <option value="52">주별 연간 (52)</option>
+        </select>
+      </div>
+    </div>
+
+    <div>
+      <div class="s-title">검증 설정</div>
+      <div class="param-row">
+        <div class="param-label">테스트 분할 <span class="param-val" id="splitVal">20%</span></div>
+        <input type="range" id="splitSlider" min="5" max="40" value="20" step="5">
+      </div>
+      <div class="param-row">
+        <div class="param-label">스무딩 α <span class="param-val" id="alphaVal">0.30</span></div>
+        <input type="range" id="alphaSlider" min="0.05" max="0.95" value="0.30" step="0.05">
+      </div>
+    </div>
+
+    <div class="sidebar-bottom">
+      <div class="log-panel" id="logPanel"></div>
+      <button class="btn-primary" id="runBtn" disabled>
+        <span id="runIcon">▶</span><span id="runText">분석 실행</span>
+      </button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <!-- Empty -->
+    <div style="flex:1; display:flex; flex-direction:column;" id="emptyWrap">
+      <div class="empty-state">
+        <div class="es-sym">📄</div>
+        <h2>CSV 파일을 업로드하여 분석을 시작하세요</h2>
+        <p>단변량 시계열 데이터를 입력하면 최적 예측 모델을 자동으로 선택하고 다양한 평가지표와 시각화 결과를 제공합니다.</p>
+        <div class="csv-box">
+          <div class="csv-box-head">지원 CSV 형식</div>
+          <div class="csv-box-body">
+            <div><div class="csv-col-head">날짜 + 값</div><div style="color:var(--blue)">date,value</div><div>2023-01,150.3</div><div>2023-02,162.1</div></div>
+            <div><div class="csv-col-head">값만</div><div style="color:var(--blue)">value</div><div>150.3</div><div>162.1</div></div>
+          </div>
+          <div class="csv-box-note">헤더 행 자동 감지 · 최소 10개 이상 권장</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboard">
+      <div class="page-rule">
+        <h2 id="pageTitle">분석 결과</h2>
+        <span class="pr-meta" id="pageMeta"></span>
+      </div>
+      <div class="main-body">
+
+        <div>
+          <div class="section-head">모델 요약 · Model Summary</div>
+          <div class="kpi-row" id="kpiRow"></div>
+          <div class="model-bar" style="margin-top:12px;" id="modelBar"></div>
+        </div>
+
+        <!-- [개선 2] 모델 비교표 -->
+        <div>
+          <div class="section-head">모델 비교 · Model Comparison</div>
+          <div class="chart-panel">
+            <div class="cp-head">
+              <div class="cp-title">전체 모델 성능 비교 (Train/Test 분리 검증)</div>
+              <div class="cp-sub">Train/Test 분리 검증 기반 모델 비교</div>
+            </div>
+            <div style="overflow-x:auto;">
+              <div id="modelCompare" style="padding:0;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- [개선 1] 검증 구간 시각화 -->
+        <div>
+          <div class="section-head">검증 구간 시각화 · Validation Chart</div>
+          <div class="chart-panel">
+            <div class="cp-head">
+              <div class="cp-title">Train / Test 분리 검증 결과 <span style="font-size:10px;font-weight:400;color:var(--ink4);font-family:var(--sans);">— Train 데이터만 학습 후 Test 구간 예측 성능 확인</span></div>
+              <div class="cp-sub" id="valChartSub"></div>
+            </div>
+            <div class="cp-body"><div style="position:relative;height:240px;overflow:visible;"><canvas id="valChart" role="img" aria-label="검증 구간 차트"></canvas></div></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-head">예측 결과 · Forecast</div>
+          <div class="chart-panel">
+            <div class="cp-head">
+              <div class="cp-title">시계열 예측값 및 간이 신뢰구간 <span style="font-size:10px;font-weight:400;color:var(--ink4);font-family:var(--sans);">— 전체 데이터 재학습 기반 미래 예측</span></div>
+              <div class="chart-legend" id="fcLegend" style="margin-bottom:0;"></div>
+            </div>
+            <div class="cp-body"><div style="position:relative;height:280px;overflow:visible;"><canvas id="forecastChart" role="img" aria-label="시계열 예측 차트"></canvas></div></div>
+          </div>
+        </div>
+
+        <!-- [개선 4] 자동 해석 문장 -->
+        <div>
+          <div class="section-head">예측 해석 · Interpretation</div>
+          <div id="warnBanner"></div>
+          <div class="interp-box" style="margin-top:8px;">
+            <div class="interp-head">📋 자동 분석 요약</div>
+            <div class="interp-body" id="interpBody"></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-head">잔차 진단 · Residual Diagnostics</div>
+          <div class="grid-2">
+            <div class="chart-panel"><div class="cp-head"><div class="cp-title">잔차 시계열</div><div class="cp-sub">Residuals over time</div></div><div class="cp-body"><div style="position:relative;height:190px;overflow:visible;"><canvas id="residualChart" role="img" aria-label="잔차"></canvas></div></div></div>
+            <div class="chart-panel"><div class="cp-head"><div class="cp-title">잔차 분포</div><div class="cp-sub">Residual distribution</div></div><div class="cp-body"><div style="position:relative;height:190px;overflow:visible;"><canvas id="histChart" role="img" aria-label="잔차 히스토그램"></canvas></div></div></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-head">상관 구조 분석 · Correlation Structure</div>
+          <div class="grid-3">
+            <div class="chart-panel"><div class="cp-head"><div class="cp-title">ACF</div><div class="cp-sub">Autocorrelation Function</div></div><div class="cp-body"><div style="position:relative;height:160px;overflow:visible;"><canvas id="acfChart" role="img" aria-label="ACF"></canvas></div></div></div>
+            <div class="chart-panel"><div class="cp-head"><div class="cp-title">PACF</div><div class="cp-sub">Partial Autocorrelation</div></div><div class="cp-body"><div style="position:relative;height:160px;overflow:visible;"><canvas id="pacfChart" role="img" aria-label="PACF"></canvas></div></div></div>
+            <div class="chart-panel"><div class="cp-head"><div class="cp-title">실제 vs 적합</div><div class="cp-sub">Actual vs Fitted</div></div><div class="cp-body"><div style="position:relative;height:160px;overflow:visible;"><canvas id="scatterChart" role="img" aria-label="산점도"></canvas></div></div></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-head">시계열 분해 · Time Series Decomposition</div>
+          <div class="grid-3">
+            <div class="chart-panel"><div class="cp-head"><div class="cp-title">추세 성분</div><div class="cp-sub">Trend</div></div><div class="cp-body"><div style="position:relative;height:110px;overflow:visible;"><canvas id="trendChart" role="img" aria-label="추세"></canvas></div></div></div>
+            <div class="chart-panel"><div class="cp-head"><div class="cp-title">계절 성분</div><div class="cp-sub">Seasonal</div></div><div class="cp-body"><div style="position:relative;height:110px;overflow:visible;"><canvas id="seasonChart" role="img" aria-label="계절"></canvas></div></div></div>
+            <div class="chart-panel"><div class="cp-head"><div class="cp-title">불규칙 성분</div><div class="cp-sub">Irregular</div></div><div class="cp-body"><div style="position:relative;height:110px;overflow:visible;"><canvas id="residDecompChart" role="img" aria-label="불규칙"></canvas></div></div></div>
+          </div>
+        </div>
+
+        <!-- 예측값 테이블 + CSV 다운로드 -->
+        <div>
+          <div class="section-head">예측값 테이블 · Forecast Table</div>
+          <div class="chart-panel">
+            <div class="cp-head">
+              <div class="cp-title">기간별 예측값 상세</div>
+              <div style="display:flex;align-items:center;gap:10px;">
+                <div class="cp-sub" id="tableInfo"></div>
+                <button class="btn-dl" id="csvDlBtn" onclick="downloadCSV()">⬇ CSV 저장</button>
+              </div>
+            </div>
+            <div style="max-height:260px;overflow-y:auto;overflow-x:auto;"><table class="fc-table" id="forecastTable"></table></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+let rawData=[], fileName='', charts={}, lastResult=null;
+Chart.defaults.clip = false;
+const $=id=>document.getElementById(id);
+
+// ── Sliders ────────────────────────────────────────────────────────────────────
+[['horizonSlider','horizonVal',v=>v],['ciSlider','ciVal',v=>v+'%'],['splitSlider','splitVal',v=>v+'%'],['alphaSlider','alphaVal',v=>parseFloat(v).toFixed(2)]].forEach(([sid,lid,fmt])=>{ $(sid).oninput=()=>{ $(lid).textContent=fmt($(sid).value); }; });
+$('seasonSelect').onchange=()=>{ $('seasonVal').textContent=$('seasonSelect').value==='auto'?'자동':$('seasonSelect').value; };
+
+// ── File Upload ────────────────────────────────────────────────────────────────
+const uz=$('uploadZone');
+uz.addEventListener('dragover',e=>{e.preventDefault();uz.classList.add('drag');});
+uz.addEventListener('dragleave',()=>uz.classList.remove('drag'));
+uz.addEventListener('drop',e=>{e.preventDefault();uz.classList.remove('drag');if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0]);});
+$('fileInput').addEventListener('change',e=>{if(e.target.files[0])handleFile(e.target.files[0]);});
+
+function handleFile(file){
+  if(!file.name.match(/\.csv$/i)){alert('CSV 파일만 지원합니다.');return;}
+  fileName=file.name;
+  const r=new FileReader(); r.onload=e=>parseCSV(e.target.result); r.readAsText(file,'UTF-8');
+}
+
+// ── [개선 3+6] CSV 파싱 — 결측치 보간 + 이상치 감지 + 데이터 부족 경고 ─────────
+function parseCSV(text){
+  const lines=text.trim().split(/\r?\n/).filter(l=>l.trim());
+  if(lines.length<5){alert('데이터가 너무 적습니다 (최소 5행).');return;}
+  const rawValues=[],labels=[];
+  const isNum=v=>!isNaN(parseFloat(v))&&isFinite(v);
+  const first=lines[0].split(',');
+  const hasHeader=!isNum(first[first.length-1]);
+  let missingCount=0;
+  (hasHeader?lines.slice(1):lines).forEach((line,i)=>{
+    const parts=line.split(',').map(s=>s.trim());
+    const raw=parts[parts.length-1];
+    const v=parseFloat(raw);
+    labels.push(parts.length>1?parts[0]:`t${i+1}`);
+    rawValues.push(isNaN(v)?NaN:v);
+    if(isNaN(v)) missingCount++;
+  });
+  if(rawValues.filter(v=>!isNaN(v)).length<5){alert('유효한 수치 데이터가 너무 적습니다.');return;}
+
+  // 선형 보간 (앞뒤 유효값 기준)
+  const values=[...rawValues];
+  for(let i=0;i<values.length;i++){
+    if(isNaN(values[i])){
+      let prev=i-1; while(prev>=0&&isNaN(values[prev]))prev--;
+      let next=i+1; while(next<values.length&&isNaN(values[next]))next++;
+      if(prev>=0&&next<values.length) values[i]=values[prev]+(values[next]-values[prev])*(i-prev)/(next-prev);
+      else if(prev>=0) values[i]=values[prev];
+      else values[i]=values[next]||0;
+    }
+  }
+
+  // IQR 이상치 감지
+  const sorted=[...values].sort((a,b)=>a-b);
+  const q1=sorted[Math.floor(sorted.length*0.25)],q3=sorted[Math.floor(sorted.length*0.75)];
+  const iqr=q3-q1,lo=q1-1.5*iqr,hi=q3+1.5*iqr;
+  const outlierCount=values.filter(v=>v<lo||v>hi).length;
+
+  rawData=values.map((v,i)=>({t:i,label:labels[i],value:v,isOutlier:v<lo||v>hi}));
+  showFileMeta(values,missingCount,outlierCount);
+  $('runBtn').disabled=false;
+  setStatus('live','파일 로드 완료');
+  addLog('ok',`${fileName} — ${values.length}개 관측치 (결측 ${missingCount}개 보간)`);
+  if(outlierCount>0) addLog('warn',`이상치 ${outlierCount}개 감지 (IQR 기준, 데이터 유지됨)`);
+}
+
+function showFileMeta(values,missingCount,outlierCount){
+  const avg=values.reduce((a,b)=>a+b,0)/values.length;
+  const mn=Math.min(...values),mx=Math.max(...values);
+  const sd=Math.sqrt(values.reduce((s,v)=>s+(v-avg)**2,0)/values.length);
+  const fm=$('fileMeta');
+  fm.innerHTML=`<div class="fm-head"><span>📄</span>${fileName}</div>
+    <div class="fm-row"><span>관측치 수</span><span class="fm-val">${values.length}</span></div>
+    <div class="fm-row"><span>평균</span><span class="fm-val">${avg.toFixed(3)}</span></div>
+    <div class="fm-row"><span>표준편차</span><span class="fm-val">${sd.toFixed(3)}</span></div>
+    <div class="fm-row"><span>최소 / 최대</span><span class="fm-val">${mn.toFixed(2)} / ${mx.toFixed(2)}</span></div>
+    <div class="fm-row"><span>변동계수</span><span class="fm-val">${(sd/Math.abs(avg)*100).toFixed(1)}%</span></div>
+    ${missingCount>0?`<div class="fm-row"><span>결측 → 보간</span><span class="fm-val" style="color:var(--amber)">${missingCount}개</span></div>`:''}
+    ${outlierCount>0?`<div class="fm-row"><span>이상치 감지</span><span class="fm-val" style="color:var(--red)">${outlierCount}개</span></div>`:''}`;
+  fm.style.display='block';
+}
+
+$('sampleBtn').addEventListener('click',()=>{
+  const n=60;
+  const values=Array.from({length:n},(_,i)=>Math.max(0,0.8*i+100+25*Math.sin(2*Math.PI*i/12)+(Math.random()-0.5)*10)).map(v=>+v.toFixed(2));
+  const labels=Array.from({length:n},(_,i)=>`${2019+Math.floor(i/12)}-${String((i%12)+1).padStart(2,'0')}`);
+  rawData=values.map((v,i)=>({t:i,label:labels[i],value:v,isOutlier:false}));
+  fileName='sample_monthly.csv';
+  showFileMeta(values,0,0);
+  $('runBtn').disabled=false;
+  setStatus('live','샘플 데이터 로드');
+  addLog('info','샘플: 월간 추세+계절성 (60기간)');
+});
+
+function setStatus(s,m){$('statusPip').className='status-pip'+(s==='live'?' live':'');$('statusText').textContent=m;}
+function addLog(type,msg){const lp=$('logPanel');lp.style.display='block';const d=document.createElement('div');d.className=`log-line ${type}`;const t=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});d.textContent=`[${t}] ${msg}`;lp.appendChild(d);lp.scrollTop=lp.scrollHeight;}
+
+// ── Math ───────────────────────────────────────────────────────────────────────
+const mean=a=>a.reduce((s,v)=>s+v,0)/a.length;
+const std=a=>{const m=mean(a);return Math.sqrt(a.reduce((s,v)=>s+(v-m)**2,0)/a.length);};
+const mae=(a,p)=>mean(a.map((v,i)=>Math.abs(v-p[i])));
+const mse=(a,p)=>mean(a.map((v,i)=>(v-p[i])**2));
+const rmse=(a,p)=>Math.sqrt(mse(a,p));
+const mape=(a,p)=>mean(a.map((v,i)=>v===0?0:Math.abs((v-p[i])/v)))*100;
+const smape=(a,p)=>mean(a.map((v,i)=>2*Math.abs(v-p[i])/(Math.abs(v)+Math.abs(p[i])+1e-10)))*100;
+const r2=(a,p)=>{const m=mean(a);const sst=a.reduce((s,v)=>s+(v-m)**2,0);return sst===0?1:1-a.reduce((s,v,i)=>s+(v-p[i])**2,0)/sst;};
+const getZ=ci=>({0.80:1.282,0.85:1.44,0.90:1.645,0.91:1.695,0.92:1.751,0.93:1.812,0.94:1.881,0.95:1.96,0.96:2.054,0.97:2.17,0.98:2.326,0.99:2.576}[ci]||1.96);
+function computeACF(res,maxLag){maxLag=maxLag||Math.min(20,Math.floor(res.length/4));const m=mean(res),c0=res.reduce((s,v)=>s+(v-m)**2,0)/res.length;return Array.from({length:maxLag+1},(_,lag)=>{const c=res.slice(lag).reduce((s,v,i)=>s+(v-m)*(res[i]-m),0)/res.length;return c/c0;});}
+function computePACF(res,maxLag){const acf=computeACF(res,maxLag),pacf=[1];for(let k=1;k<=maxLag;k++){const prev=pacf.slice(1,k);const r=acf[k]-prev.reduce((s,v,i)=>s+v*acf[k-1-i],0);const d=1-prev.reduce((s,v,i)=>s+v*acf[i+1],0);pacf.push(Math.max(-1,Math.min(1,d!==0?r/d:0)));}return pacf;}
+function decompose(data,m){const n=data.length,hw=Math.floor(m/2);const trend=data.map((_,i)=>mean(data.slice(Math.max(0,i-hw),Math.min(n-1,i+hw)+1)));const det=data.map((v,i)=>v-trend[i]);const seasonal=new Array(n).fill(0);for(let j=0;j<m;j++){const vals=[];for(let k=j;k<n;k+=m)vals.push(det[k]);const avg=mean(vals);for(let k=j;k<n;k+=m)seasonal[k]=avg;}return{trend,seasonal,residual:data.map((v,i)=>v-trend[i]-seasonal[i])};}
+function detectSeasonality(data){const c=[4,7,12,24,52];if(data.length<8)return 4;let bM=12,bS=Infinity;c.forEach(m=>{if(data.length<m*2)return;let s=0;for(let i=m;i<data.length;i++)s+=(data[i]-data[i-m])**2;if(s<bS){bS=s;bM=m;}});return bM;}
+
+// ── [개선 5] AIC/BIC — 모델별 파라미터 수 반영 ────────────────────────────────
+function calcAIC(data,fitted,k){const n=data.length,ssr=mse(data,fitted);return n*Math.log(ssr+1e-10)+2*k;}
+function calcBIC(data,fitted,k){const n=data.length,ssr=mse(data,fitted);return n*Math.log(ssr+1e-10)+k*Math.log(n);}
+const modelParamCount={'SES':1,'DES':2,'TES':3,'Damped':3,'Linear':2,'MA':2};
+function getParamCount(name){for(const k of Object.keys(modelParamCount))if(name.startsWith(k)||name.includes(k))return modelParamCount[k];return 3;}
+
+// ── [개선 8] 모델 설명 ─────────────────────────────────────────────────────────
+const MODEL_DESC={
+  SES:'추세·계절성 없는 안정적 데이터에 적합. 최근값에 지수적 가중치 부여.',
+  DES:'선형 추세가 있는 데이터에 적합 (Holt 이중 지수평활).',
+  TES:'추세 + 계절성이 함께 있는 데이터에 최적 (Holt-Winters).',
+  MA:'단기 변동 완화에 적합. 추세·계절성 없는 안정적 시계열 권장.',
+  Linear:'뚜렷한 선형 추세를 가진 데이터에 적합.',
+  Damped:'장기 예측 시 추세 과장을 방지하는 감쇠 추세 모델.',
+};
+function getModelDesc(name){for(const k of Object.keys(MODEL_DESC))if(name.startsWith(k)||name.includes(k))return MODEL_DESC[k];return '';}
+
+// ── Models ─────────────────────────────────────────────────────────────────────
+function modelSES(d,a){a=a||0.3;const f=[d[0]];for(let i=1;i<d.length;i++)f.push(a*d[i-1]+(1-a)*f[i-1]);const last=f[f.length-1];return{fitted:f,forecast:h=>Array(h).fill(last),name:'SES',alpha:a};}
+function modelDES(d,a,b){a=a||0.3;b=b||0.1;let l=d[0],bv=d[1]-d[0];const f=[l+bv];for(let i=1;i<d.length;i++){const pl=l,pb=bv;l=a*d[i]+(1-a)*(pl+pb);bv=b*(l-pl)+(1-b)*pb;f.push(l+bv);}return{fitted:f,forecast:h=>Array.from({length:h},(_,k)=>l+(k+1)*bv),name:'DES (Holt)',alpha:a,beta:b};}
+function modelTES(d,a,b,g,m){m=m||12;a=a||0.3;b=b||0.1;g=g||0.3;if(d.length<m*2)return modelDES(d,a,b);const S=Array.from({length:m},(_,j)=>{const v=[];for(let k=j;k<d.length;k+=m)v.push(d[k]);return mean(v);});const sm=mean(S);const season=S.map(v=>v/(sm||1));let l=mean(d.slice(0,m)),bv=(mean(d.slice(m,m*2))-mean(d.slice(0,m)))/m;const f=[];for(let i=0;i<d.length;i++){const si=season[i%m];f.push((l+bv)*si);const pl=l;l=a*(d[i]/(si||1))+(1-a)*(pl+bv);bv=b*(l-pl)+(1-b)*bv;season[i%m]=g*(d[i]/(l||1))+(1-g)*si;}return{fitted:f,forecast:h=>Array.from({length:h},(_,k)=>(l+(k+1)*bv)*season[(d.length+k)%m]),name:'TES (Holt-Winters)',alpha:a,beta:b,gamma:g,m};}
+function modelDamped(d,a,b,phi){a=a||0.3;b=b||0.1;phi=phi||0.9;let l=d[0],bv=d[1]-d[0];const f=[l+phi*bv];for(let i=1;i<d.length;i++){const pl=l,pb=bv;l=a*d[i]+(1-a)*(pl+phi*pb);bv=b*(l-pl)+(1-b)*phi*pb;f.push(l+phi*bv);}return{fitted:f,forecast:h=>Array.from({length:h},(_,k)=>{let s=0,ph=phi;for(let j=1;j<=k+1;j++){s+=ph;ph*=phi;}return l+s*bv;}),name:'Damped Trend',alpha:a,beta:b,phi};}
+function modelMA(d,w){w=w||Math.min(12,Math.max(3,Math.floor(d.length/5)));const f=d.map((_,i)=>mean(d.slice(Math.max(0,i-w+1),i+1)));return{fitted:f,forecast:h=>Array(h).fill(mean(d.slice(-w))),name:`MA(${w})`,w};}
+function modelLinear(d){const n=d.length,xs=Array.from({length:n},(_,i)=>i),xm=mean(xs),ym=mean(d);const num=xs.reduce((s,x,i)=>s+(x-xm)*(d[i]-ym),0),den=xs.reduce((s,x)=>s+(x-xm)**2,0);const slope=num/den,intercept=ym-slope*xm;return{fitted:xs.map(x=>intercept+slope*x),forecast:h=>Array.from({length:h},(_,k)=>intercept+slope*(n+k)),name:'Linear Trend',slope,intercept};}
+
+function buildModel(name,d,alpha,m){
+  if(name==='SES') return modelSES(d,alpha);
+  if(name==='DES') return modelDES(d,alpha);
+  if(name==='TES') return modelTES(d,alpha,0.1,0.3,m);
+  if(name==='MA')  return modelMA(d);
+  if(name==='Linear') return modelLinear(d);
+  if(name==='Damped') return modelDamped(d,alpha);
+  return modelLinear(d);
+}
+
+// ── [개선 1+2] Train/Test 분리 검증 + test RMSE 기반 자동 선택 ─────────────────
+function evaluateAllModels(trainData,testData,alpha,m){
+  return ['SES','DES','TES','MA','Linear','Damped'].map(name=>{
+    try{
+      const trained=buildModel(name,trainData,alpha,m);
+      const testPred=trained.forecast(testData.length);
+      return{name:trained.name,shortName:name,testRmse:rmse(testData,testPred),testMape:mape(testData,testPred),testMae:mae(testData,testPred),valid:true};
+    }catch(e){return{name,shortName:name,testRmse:Infinity,testMape:Infinity,testMae:Infinity,valid:false};}
+  }).filter(r=>r.valid).sort((a,b)=>a.testRmse-b.testRmse);
+}
+
+// ── [개선 5] CSV 다운로드 ──────────────────────────────────────────────────────
+function downloadCSV(){
+  if(!lastResult)return;
+  const{labels,values,forecasted,ciU,ciL}=lastResult;
+  const rows=[['기간','구분','실제값','예측값','간이CI하한','간이CI상한','전기대비(%)','기준대비(%)']];
+  values.forEach((v,i)=>rows.push([labels[i],'실측',v.toFixed(3),'','','','','']));
+  const lastVal=values[values.length-1];
+  forecasted.forEach((v,i)=>{
+    const prev=i===0?lastVal:forecasted[i-1];
+    const cp=((v-prev)/Math.abs(prev)*100).toFixed(2);
+    const cb=((v-lastVal)/Math.abs(lastVal)*100).toFixed(2);
+    rows.push([`+${i+1}`,'예측','',v.toFixed(3),ciL[i].toFixed(3),ciU[i].toFixed(3),(+cp>=0?'+':'')+cp+'%',(+cb>=0?'+':'')+cb+'%']);
+  });
+  const csv=rows.map(r=>r.join(',')).join('\n');
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`forecast_${fileName.replace('.csv','')}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+// ── Run Analysis ───────────────────────────────────────────────────────────────
+$('runBtn').addEventListener('click',runAnalysis);
+
+function runAnalysis(){
+  if(!rawData.length)return;
+  setStatus('live','분석 중...');
+  $('runBtn').disabled=true;
+  $('runIcon').innerHTML='<div class="spinner"></div>';
+  $('runText').textContent='분석 중...';
+  $('emptyWrap').style.display='none';
+  $('dashboard').style.display='flex';
+  $('dashboard').style.flexDirection='column';
+  Object.values(charts).forEach(c=>c&&c.destroy&&c.destroy());
+  charts={};
+
+  const horizon=+$('horizonSlider').value, ciLevel=+$('ciSlider').value/100;
+  const splitPct=+$('splitSlider').value/100, alpha=+$('alphaSlider').value;
+  const m=$('seasonSelect').value==='auto'?detectSeasonality(rawData.map(d=>d.value)):+$('seasonSelect').value;
+  const method=$('methodSelect').value;
+  const isAuto=(method==='auto');
+
+  setTimeout(()=>{
+    try{
+      const values=rawData.map(d=>d.value);
+      const labels=rawData.map(d=>d.label);
+      const n=values.length;
+      const splitIdx=Math.floor(n*(1-splitPct));
+      const trainData=values.slice(0,splitIdx);
+      const testData=values.slice(splitIdx);
+
+      // ── [개선 6] 데이터 부족 경고 ────────────────────────────────────────────
+      const warnings=[];
+      if(n<20) warnings.push('관측치가 20개 미만입니다. 검증 지표의 신뢰도가 낮을 수 있습니다.');
+      if(n<m*2) warnings.push(`계절성 주기(${m})의 2배 미만 데이터입니다. 계절성 모델(TES) 결과에 주의하세요.`);
+      if(testData.length<3) warnings.push('test 데이터가 너무 적습니다. 분할 비율을 높이거나 데이터를 추가하세요.');
+
+      addLog('info',`분할: train ${trainData.length} / test ${testData.length} | 계절: ${m}`);
+
+      // [개선 2] 전체 모델 비교 (test RMSE 기준)
+      const allResults=evaluateAllModels(trainData,testData,alpha,m);
+      const bestShortName=allResults[0].shortName;
+
+      // [개선 2] 선택 모드 결정
+      let selectedShortName;
+      if(isAuto) selectedShortName=bestShortName;
+      else selectedShortName=method==='ses'?'SES':method==='des'?'DES':method==='tes'?'TES':method==='ma'?'MA':method==='linear'?'Linear':'Damped';
+
+      // [개선 1] train으로만 학습, test 구간 예측
+      const trainedModel=buildModel(selectedShortName,trainData,alpha,m);
+      const testForecast=trainedModel.forecast(testData.length);
+
+      const valMetrics={
+        rmse:rmse(testData,testForecast),mae:mae(testData,testForecast),
+        mape:mape(testData,testForecast),smape:smape(testData,testForecast),
+        r2:r2(testData,testForecast),
+      };
+
+      // 전체 데이터 재학습 → 미래 예측
+      const fullModel=buildModel(selectedShortName,values,alpha,m);
+      const fitted=fullModel.fitted;
+      const forecasted=fullModel.forecast(horizon);
+      const residuals=values.map((v,i)=>v-fitted[i]);
+      const resStd=std(residuals);
+      const z=getZ(ciLevel);
+
+      // [개선 4] √h 확장 신뢰구간
+      const ciU=forecasted.map((v,i)=>v+z*resStd*Math.sqrt(i+1));
+      const ciL=forecasted.map((v,i)=>v-z*resStd*Math.sqrt(i+1));
+
+      const pk=getParamCount(fullModel.name);
+      const metrics={...valMetrics,aic:calcAIC(values,fitted,pk),bic:calcBIC(values,fitted,pk)};
+      const decomp=decompose(values,m);
+
+      addLog('ok',`[${fullModel.name}] test RMSE=${valMetrics.rmse.toFixed(3)}, MAPE=${valMetrics.mape.toFixed(2)}%`);
+
+      lastResult={values,labels,fitted,forecasted,ciU,ciL,residuals,metrics,model:fullModel,
+        splitIdx,horizon,decomp,m,ciLevel,allResults,trainData,testData,testForecast,
+        isAuto,selectedShortName,bestShortName,warnings,resStd,z};
+
+      renderDashboard(lastResult);
+
+      $('pageTitle').textContent=`분석 결과 — ${fullModel.name}`;
+      $('pageMeta').textContent=`${fileName} · ${n}개 관측치 · 예측 시평 ${horizon}기간`;
+      $('headerMeta').textContent=new Date().toLocaleString('ko-KR');
+      setStatus('live',`완료 — ${fullModel.name}`);
+    }catch(err){
+      console.error(err);addLog('warn',`오류: ${err.message}`);setStatus('','오류 발생');
+    }
+    $('runBtn').disabled=false;$('runIcon').textContent='▶';$('runText').textContent='재분석';
+  },30);
+}
+
+// ── Colors & opts ──────────────────────────────────────────────────────────────
+const C={ink:'#1c1810',ink4:'#9c8f7e',blue:'#1a3a5c',teal:'#1a4a3a',red:'#8b2a1a',amber:'#7a4e10',gray:'#9c8f7e'};
+const opts=(extra={})=>{
+  const base={responsive:true,maintainAspectRatio:false,layout:{padding:{top:16,right:16,bottom:8,left:8}},plugins:{legend:{display:false}},
+    scales:{x:{ticks:{color:C.ink4,font:{size:10,family:'Noto Sans KR'}},grid:{color:'rgba(28,24,16,0.06)'}},y:{ticks:{color:C.ink4,font:{size:10,family:'Noto Sans KR'}},grid:{color:'rgba(28,24,16,0.06)'},grace:'8%'}}};
+  if(extra.scales){if(extra.scales.x)base.scales.x={...base.scales.x,...extra.scales.x};if(extra.scales.y)base.scales.y={...base.scales.y,...extra.scales.y};const{scales,...re}=extra;return{...base,...re};}
+  return{...base,...extra};
+};
+
+// ── Render ─────────────────────────────────────────────────────────────────────
+function renderDashboard({values,labels,fitted,forecasted,ciU,ciL,residuals,metrics,model,splitIdx,horizon,decomp,m,ciLevel,allResults,trainData,testData,testForecast,isAuto,selectedShortName,bestShortName,warnings,resStd,z}){
+  const quality=metrics.mape<10?'good':metrics.mape<25?'ok':'bad';
+  const qLabel=quality==='good'?'예측 양호':quality==='ok'?'예측 보통':'개선 권장';
+  const ciPct=Math.round(ciLevel*100);
+  const pk=getParamCount(model.name);
+
+  // KPI
+  $('kpiRow').innerHTML=[
+    {label:'RMSE',val:metrics.rmse.toFixed(3),sub:'검증셋 기준'},
+    {label:'MAE',val:metrics.mae.toFixed(3),sub:'검증셋 기준'},
+    {label:'MAPE',val:metrics.mape.toFixed(2)+'%',sub:'검증셋 기준'},
+    {label:'R²',val:metrics.r2.toFixed(4),sub:'결정계수'},
+    {label:'sMAPE',val:metrics.smape.toFixed(2)+'%',sub:'대칭 MAPE',acc:true},
+  ].map(k=>`<div class="kpi-cell${k.acc?' accent':''}"><div class="kc-label">${k.label}</div><div class="kc-val">${k.val}</div><div class="kc-sub">${k.sub||''}</div></div>`).join('');
+
+  // [개선 2+8] 모델바 — 자동/수동 구분 + 모델 설명
+  const selTag=isAuto
+    ?`<span class="sel-mode-auto">자동 선택</span>`
+    :(selectedShortName===bestShortName
+      ?`<span class="sel-mode-manual">수동 선택 (최적 일치)</span>`
+      :`<span class="sel-mode-manual">수동 선택 ⚠ 최적 모델: ${allResults[0].name}</span>`);
+
+  $('modelBar').innerHTML=`<div class="model-bar-head">
+      <span style="display:flex;align-items:center;gap:8px;">${selTag} ${model.name}</span>
+      <span class="quality-tag q-${quality}">${qLabel}</span>
+    </div>
+    <div class="model-bar-body">
+      <div class="model-stat">Train / Test<strong>${trainData.length} / ${testData.length}</strong></div>
+      <div class="model-stat">예측 시평<strong>${horizon}기간</strong></div>
+      <div class="model-stat">계절성<strong>${m}</strong></div>
+      <div class="model-stat" title="참고 지표">AIC<span style="font-size:9px;color:var(--ink4);"> 참고</span><strong>${metrics.aic.toFixed(1)}</strong></div>
+      <div class="model-stat" title="참고 지표">BIC<span style="font-size:9px;color:var(--ink4);"> 참고</span><strong>${metrics.bic.toFixed(1)}</strong></div>
+      <div class="model-stat" style="flex:1;max-width:none;color:var(--ink4);font-size:11px;padding:10px 18px;">${getModelDesc(model.name)}</div>
+    </div>`;
+
+  // [개선 2] 모델 비교표
+  const compEl=$('modelCompare');
+  if(compEl){
+    compEl.innerHTML=`<table class="fc-table">
+      <thead><tr><th>모델</th><th>Test RMSE</th><th>Test MAE</th><th>Test MAPE</th><th>선택 여부</th></tr></thead>
+      <tbody>${allResults.map((r,i)=>{
+        const isSel=r.shortName===selectedShortName;
+        const isBest=i===0;
+        return`<tr style="${isSel?'background:var(--paper3);':''}">
+          <td style="color:var(--ink2);font-weight:${isSel?'500':'400'}">${r.name}</td>
+          <td class="${isSel?'pred':''}">${r.testRmse.toFixed(3)}</td>
+          <td>${r.testMae.toFixed(3)}</td>
+          <td>${r.testMape.toFixed(2)}%</td>
+          <td>${isSel&&isBest?'<span style="color:var(--teal);font-weight:500;">✓ 선택 (최적)</span>':isSel?'<span style="color:var(--amber);font-weight:500;">✓ 선택 (수동)</span>':isBest?'<span style="color:var(--ink4);">최적 (미선택)</span>':'—'}</td>
+        </tr>`;
+      }).join('')}</tbody></table>`;
+  }
+
+  $('fcLegend').innerHTML=[{col:C.blue,label:'실제값'},{col:C.teal,label:'적합값'},{col:C.amber,label:`예측값 (간이 ${ciPct}% CI)`}]
+    .map(l=>`<span class="legend-item"><span class="legend-line" style="background:${l.col}"></span><span style="font-family:var(--sans);font-size:11px;color:var(--ink3);">${l.label}</span></span>`).join('');
+
+  // Chart 1: 메인 예측
+  const allL=[...labels,...Array.from({length:horizon},(_,i)=>`+${i+1}`)];
+  const fp=arr=>[...arr,...Array(horizon).fill(null)];
+  charts.forecast=new Chart(document.getElementById('forecastChart').getContext('2d'),{type:'line',data:{labels:allL,datasets:[
+    {label:'CI상한',data:[...Array(values.length).fill(null),...ciU],borderColor:'rgba(122,78,16,0)',backgroundColor:'rgba(122,78,16,0.08)',fill:'+1',pointRadius:0,tension:0.2},
+    {label:'CI하한',data:[...Array(values.length).fill(null),...ciL],borderColor:'rgba(122,78,16,0.18)',borderWidth:1,borderDash:[3,3],fill:false,pointRadius:0,tension:0.2},
+    {label:'실제값',data:fp(values),borderColor:C.blue,borderWidth:1.5,pointRadius:0,fill:false,tension:0.1},
+    {label:'적합값',data:fp(fitted),borderColor:C.teal,borderWidth:1,borderDash:[5,4],pointRadius:0,fill:false,tension:0.1},
+    {label:'예측값',data:[...Array(values.length).fill(null),...forecasted],borderColor:C.amber,borderWidth:2.5,pointRadius:2.5,pointBackgroundColor:C.amber,fill:false,tension:0.2},
+  ]},options:{...opts(),interaction:{mode:'index',intersect:false}}});
+
+  // Chart 2: 잔차
+  charts.residual=new Chart(document.getElementById('residualChart').getContext('2d'),{type:'bar',data:{labels,datasets:[{data:residuals,backgroundColor:residuals.map(v=>v>=0?'rgba(26,74,58,0.5)':'rgba(139,42,26,0.5)'),borderColor:residuals.map(v=>v>=0?C.teal:C.red),borderWidth:1}]},options:opts()});
+
+  // Chart 3: 히스토그램
+  const bins=14,rMin=Math.min(...residuals),rMax=Math.max(...residuals),bw=(rMax-rMin)/bins;
+  const counts=Array(bins).fill(0);
+  residuals.forEach(r=>{counts[Math.min(Math.floor((r-rMin)/bw),bins-1)]++;});
+  charts.hist=new Chart(document.getElementById('histChart').getContext('2d'),{type:'bar',data:{labels:Array.from({length:bins},(_,i)=>(rMin+(i+0.5)*bw).toFixed(1)),datasets:[{data:counts,backgroundColor:'rgba(26,58,92,0.45)',borderColor:C.blue,borderWidth:1,borderRadius:1}]},options:opts()});
+
+  // Chart 4: ACF
+  const acf=computeACF(residuals,20),ci95=1.96/Math.sqrt(residuals.length);
+  charts.acf=new Chart(document.getElementById('acfChart').getContext('2d'),{type:'bar',data:{labels:acf.map((_,i)=>`${i}`),datasets:[
+    {data:acf,backgroundColor:acf.map((v,i)=>i===0?'rgba(26,58,92,0.2)':Math.abs(v)>ci95?'rgba(139,42,26,0.65)':'rgba(26,58,92,0.45)'),borderColor:'transparent'},
+    {type:'line',data:Array(acf.length).fill(ci95),borderColor:'rgba(122,78,16,0.5)',borderDash:[4,3],borderWidth:1,pointRadius:0,fill:false},
+    {type:'line',data:Array(acf.length).fill(-ci95),borderColor:'rgba(122,78,16,0.5)',borderDash:[4,3],borderWidth:1,pointRadius:0,fill:false},
+  ]},options:{...opts(),scales:{x:{ticks:{color:C.ink4,font:{size:9}},grid:{display:false}},y:{min:-1.1,max:1.1,ticks:{color:C.ink4,font:{size:9}},grid:{color:'rgba(28,24,16,0.06)'}}}}});
+
+  // Chart 5: PACF
+  const pacf=computePACF(residuals,20);
+  charts.pacf=new Chart(document.getElementById('pacfChart').getContext('2d'),{type:'bar',data:{labels:pacf.map((_,i)=>`${i}`),datasets:[
+    {data:pacf,backgroundColor:pacf.map((v,i)=>i===0?'rgba(26,58,92,0.2)':Math.abs(v)>ci95?'rgba(122,78,16,0.7)':'rgba(26,74,58,0.45)'),borderColor:'transparent'},
+    {type:'line',data:Array(pacf.length).fill(ci95),borderColor:'rgba(139,42,26,0.4)',borderDash:[4,3],borderWidth:1,pointRadius:0,fill:false},
+    {type:'line',data:Array(pacf.length).fill(-ci95),borderColor:'rgba(139,42,26,0.4)',borderDash:[4,3],borderWidth:1,pointRadius:0,fill:false},
+  ]},options:{...opts(),scales:{x:{ticks:{color:C.ink4,font:{size:9}},grid:{display:false}},y:{min:-1.1,max:1.1,ticks:{color:C.ink4,font:{size:9}},grid:{color:'rgba(28,24,16,0.06)'}}}}});
+
+  // Chart 6: Scatter
+  const scData=values.map((v,i)=>({x:v,y:fitted[i]}));
+  const vMin=Math.min(...values),vMax=Math.max(...values);
+  charts.scatter=new Chart(document.getElementById('scatterChart').getContext('2d'),{type:'scatter',data:{datasets:[
+    {data:scData,backgroundColor:'rgba(26,58,92,0.4)',borderColor:'rgba(26,58,92,0.6)',pointRadius:3,borderWidth:1},
+    {data:[{x:vMin,y:vMin},{x:vMax,y:vMax}],type:'line',borderColor:'rgba(139,42,26,0.35)',borderDash:[4,3],borderWidth:1,pointRadius:0,showLine:true,fill:false}
+  ]},options:{...opts({scales:{x:{ticks:{color:C.ink4,maxTicksLimit:5,font:{size:9}},grid:{color:'rgba(28,24,16,0.06)'},title:{display:true,text:'실제값',color:C.ink4,font:{size:9}}},y:{ticks:{color:C.ink4,maxTicksLimit:5,font:{size:9}},grid:{color:'rgba(28,24,16,0.06)'},title:{display:true,text:'적합값',color:C.ink4,font:{size:9}}}}})}});
+
+  // Charts 7-9: 시계열 분해
+  [[document.getElementById('trendChart'),decomp.trend,C.blue],[document.getElementById('seasonChart'),decomp.seasonal,C.teal],[document.getElementById('residDecompChart'),decomp.residual,C.red]].forEach(([el,data,col])=>{
+    charts[el.id]=new Chart(el.getContext('2d'),{type:'line',data:{labels,datasets:[{data,borderColor:col,borderWidth:1.5,pointRadius:0,fill:{target:'origin',above:col+'22',below:col+'22'},tension:0.2}]},options:{...opts(),scales:{x:{ticks:{color:C.ink4,maxTicksLimit:7,font:{size:9}},grid:{color:'rgba(28,24,16,0.04)'}},y:{ticks:{color:C.ink4,maxTicksLimit:4,font:{size:9}},grid:{color:'rgba(28,24,16,0.06)'}}}}});
+  });
+
+  // ── [개선 1] 검증 구간 시각화 차트 ────────────────────────────────────────────
+  $('valChartSub').textContent=`train ${trainData.length}개 → test ${testData.length}개 예측 vs 실제`;
+  const testOverlayActual=values.map((v,i)=>i>=splitIdx?v:null);
+  const testOverlayForecast=values.map((_,i)=>i>=splitIdx?testForecast[i-splitIdx]:null);
+  charts.val=new Chart(document.getElementById('valChart').getContext('2d'),{type:'line',data:{labels,datasets:[
+    {label:'Train 실제값',data:values.map((v,i)=>i<splitIdx?v:null),borderColor:C.blue,borderWidth:1.5,pointRadius:0,fill:false,tension:0.1},
+    {label:'Test 실제값',data:testOverlayActual,borderColor:'#8b2a1a',borderWidth:2.5,pointRadius:4,pointBackgroundColor:'#8b2a1a',fill:false,tension:0.1},
+    {label:'Test 예측값',data:testOverlayForecast,borderColor:C.amber,borderWidth:2.5,pointRadius:4,pointBackgroundColor:C.amber,fill:false,tension:0.1,borderDash:[5,3]},
+    
+  ]},options:{...opts(),
+    plugins:{legend:{display:true,position:'top',labels:{color:C.ink4,font:{size:10,family:'Noto Sans KR'},boxWidth:12,usePointStyle:true}}},
+    interaction:{mode:'index',intersect:false}
+  }});
+
+  // ── [개선 6] 데이터 부족 경고 배너 ────────────────────────────────────────────
+  const wb=$('warnBanner');
+  if(warnings.length>0){
+    wb.innerHTML=warnings.map(w=>`<div class="warn-banner">⚠ <span>${w}</span></div>`).join('');
+    wb.style.marginBottom='8px';
+  } else {
+    wb.innerHTML='';
+  }
+
+  // ── [개선 4] 자동 해석 문장 생성 ──────────────────────────────────────────────
+  const lastVal=values[values.length-1];
+  const fcEnd=forecasted[forecasted.length-1];
+  const trendDir=fcEnd>lastVal*1.02?'상승':fcEnd<lastVal*0.98?'하락':'안정적';
+  const trendPct=((fcEnd-lastVal)/Math.abs(lastVal)*100).toFixed(1);
+  const cv=(std(values)/Math.abs(mean(values))*100).toFixed(1);
+  const isHighVol=parseFloat(cv)>30;
+  const ciWidth=((ciU[ciU.length-1]-ciL[ciL.length-1])/Math.abs(fcEnd+1e-10)*100).toFixed(1);
+  const qualityFinal=metrics.mape<10?'높습니다':metrics.mape<25?'보통입니다':'다소 낮으므로 해석에 주의하세요';
+
+  const interps=[
+    {icon:'📈',text:`<b>예측 방향:</b> 향후 ${horizon}기간 예측값은 현재 대비 <b>${trendDir} 추세</b>이며, 마지막 예측값 기준 <b>${+trendPct>=0?'+':''}${trendPct}%</b> 변화 가능성이 있습니다.`},
+    {icon:'📊',text:`<b>데이터 변동성:</b> 변동계수 ${cv}%로 변동성이 <b>${isHighVol?'높은 편':'낮은 편'}</b>입니다. ${isHighVol?'예측 불확실성이 높을 수 있습니다.':'비교적 안정적인 예측이 가능한 데이터로 해석할 수 있습니다.'}`},
+    {icon:'🎯',text:`<b>모델 예측력:</b> test 데이터 기준 MAPE ${metrics.mape.toFixed(2)}%로 예측 정확도가 <b>${qualityFinal}</b>`},
+    {icon:'📐',text:`<b>간이 신뢰구간:</b> ${horizon}기간 후 예측값의 간이 ${ciPct}% 신뢰구간 폭은 약 <b>${ciWidth}%</b>입니다. 예측 기간이 길어질수록 구간이 넓어지므로 장기 예측 해석에 주의가 필요합니다.`},
+    {icon:'⚙️',text:`<b>적용 모델:</b> ${model.name} — ${getModelDesc(model.name)}`},
+  ];
+
+  $('interpBody').innerHTML=interps.map(r=>`<div class="interp-row"><span class="interp-icon">${r.icon}</span><span>${r.text}</span></div>`).join('');
+
+  // 예측 테이블
+  $('tableInfo').textContent=`향후 ${horizon}기간 · 간이 ${ciPct}% 신뢰구간 (√h 확장)`;
+  $('forecastTable').innerHTML=`<thead><tr><th>기간</th><th>예측값</th><th>하한</th><th>상한</th><th>전기 대비</th><th>기준 대비</th></tr></thead>
+    <tbody>${forecasted.map((v,i)=>{const prev=i===0?lastVal:forecasted[i-1];const cp=((v-prev)/Math.abs(prev)*100).toFixed(2);const cb=((v-lastVal)/Math.abs(lastVal)*100).toFixed(2);return`<tr><td class="period">+${i+1}</td><td class="pred">${v.toFixed(3)}</td><td style="color:var(--ink4)">${ciL[i].toFixed(3)}</td><td style="color:var(--ink4)">${ciU[i].toFixed(3)}</td><td class="${+cp>=0?'pos':'neg'}">${+cp>=0?'+':''}${cp}%</td><td class="${+cb>=0?'pos':'neg'}">${+cb>=0?'+':''}${cb}%</td></tr>`;}).join('')}</tbody>`;
+}
+</script>
+</body>
+</html>
